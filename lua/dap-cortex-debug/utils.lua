@@ -88,7 +88,13 @@ end
 function M.coroutine_resume()
     local co = assert(coroutine.running())
     return function(...)
-        coroutine.resume(co, ...)
+        local ret = { coroutine.resume(co, ...) }
+        -- Re-raise errors with correct traceback
+        local ok, err = unpack(ret)
+        if not ok then
+            error(debug.traceback(co, err))
+        end
+        return unpack(ret, 2)
     end
 end
 
@@ -129,10 +135,29 @@ function M.get_lib_ext()
     return config.lib_extension or extensions[M.get_platform()]
 end
 
+local function get_mason_extension_path()
+    if vim.env.MASON then
+        local path = vim.env.MASON .. '/share/cortex-debug'
+        if vim.fn.isdirectory(path) then
+            return path
+        end
+    end
+end
+
+local function default_extension_path()
+    local extension_path = get_mason_extension_path()
+    if not extension_path then
+        local home = M.get_platform() == 'windows' and '$USERPROFILE' or '~'
+        extension_path = home .. '/.vscode/extensions/marus25.cortex-debug-*/'
+    end
+    return extension_path
+end
+
 --- Resolve and sanitize path to cortex-debug extension
 ---@return string?
 function M.get_extension_path()
-    local paths = vim.fn.glob(config.extension_path, false, true)
+    local extension_path = config.extension_path or default_extension_path()
+    local paths = vim.fn.glob(extension_path, false, true)
     if paths and paths[1] then
         return M.path_sanitize(paths[1])
     end
